@@ -9,10 +9,14 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableNativeArray
 import com.facebook.react.bridge.WritableNativeMap
+import com.facebook.react.bridge.ReadableArray
 
 import com.nabto.edge.client.Connection
 import com.nabto.edge.client.Coap
 import com.nabto.edge.client.NabtoClient
+import com.nabto.edge.client.Stream
+import com.nabto.edge.client.TcpTunnel
+import com.nabto.edge.client.MdnsScanner
 import com.nabto.edge.client.ErrorCodes
 import com.nabto.edge.client.ErrorCode
 import com.nabto.edge.client.NabtoEOFException
@@ -24,7 +28,10 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
 
   private val mNabtoClients = SparseArray<NabtoClient>()
   private val mConnections = SparseArray<Connection>()
+  private val mStreams = SparseArray<Stream>()
   private val mCoapObjects = SparseArray<Coap>()
+  private val mTcpTunnels = SparseArray<TcpTunnel>()
+  private val mMdnsScanners = SparseArray<MdnsScanner>()
 
   override fun getName(): String {
     return NAME
@@ -70,6 +77,12 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
     return mNabtoClients.get(clientId).version()
   }
 
+  @ReactMethod
+  fun clientSetLogLevel(clientId: Int, level: String, promise: Promise) {
+    mNabtoClients[clientId].setLogLevel(level)
+    promise.resolve(null)
+  }
+
   @ReactMethod(isBlockingSynchronousMethod = true)
   fun clientCreatePrivateKey(clientId: Int): String {
     return mNabtoClients.get(clientId).createPrivateKey()
@@ -84,7 +97,16 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun clientClose(clientId: Int, promise: Promise) {
+  fun createMdnsScanner(clientId: Int, scannerId: Int, subtype: String, promise: Promise) {
+    val client = mNabtoClients[clientId]
+    val scanner = client.createMdnsScanner(subtype)
+    mMdnsScanners.put(scannerId, scanner)
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun clientDispose(clientId: Int, promise: Promise) {
+    mNabtoClients[clientId].close()
     mNabtoClients.remove(clientId)
     promise.resolve(null)
   }
@@ -117,18 +139,183 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun connectionClose(connectionId: Int, promise: Promise) {
-    val conn = mConnections.get(connectionId)
-    conn.close()
-    mConnections.remove(connectionId)
+  fun connectionCreateStream(connectionId: Int, streamId: Int, promise: Promise) {
+    val conn = mConnections[connectionId]
+    val stream = conn.createStream()
+    mStreams.put(streamId, stream)
     promise.resolve(null)
   }
 
   @ReactMethod
-  fun connectionCreateCoap(connectionId: Int, coapId: Int, method: String, path: String promise: Promise) {
+  fun connectionCreateCoap(connectionId: Int, coapId: Int, method: String, path: String, promise: Promise) {
     val conn = mConnections.get(connectionId)
     val coap = conn.createCoap(method, path)
     mCoapObjects.put(coapId, coap)
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun connectionCreateTcpTunnel(connectionId: Int, tcpTunnelId: Int, promise: Promise) {
+    val conn = mConnections[connectionId]
+    val tunnel = conn.createTcpTunnel()
+    mTcpTunnels.put(tcpTunnelId, tunnel)
+    promise.resolve(null)
+  }
+  
+  @ReactMethod
+  fun connectionGetDeviceFingerprint(connectionId: Int, promise: Promise) {
+    val conn = mConnections[connectionId]
+    promise.resolve(conn.deviceFingerprint)
+  }
+
+  @ReactMethod
+  fun connectionGetClientFingerprint(connectionId: Int, promise: Promise) {
+    val conn = mConnections[connectionId]
+    promise.resolve(conn.clientFingerprint)
+  }
+
+  @ReactMethod
+  fun connectionGetType(connectionId: Int, promise: Promise) {
+    val conn = mConnections[connectionId]
+    promise.resolve(conn.type.ordinal)
+  }
+
+  @ReactMethod
+  fun connectionEnableDirectCandidates(connectionId: Int, promise: Promise) {
+    val conn = mConnections[connectionId]
+    conn.enableDirectCandidates()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun connectionAddDirectCandidate(connectionId: Int, host: String, port: Int, promise: Promise) {
+    val conn = mConnections[connectionId]     
+    conn.addDirectCandidate(host, port)
+    promise.resolve(null) 
+  }
+
+  @ReactMethod
+  fun connectionEndOfDirectCandidates(connectionId: Int, promise: Promise) {
+    val conn = mConnections[connectionId]
+    conn.endOfDirectCandidates()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun connectionDispose(connectionId: Int, promise: Promise) {
+    val conn = mConnections[connectionId]
+    mConnections.remove(connectionId)
+    conn.close()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun connectionGetLocalChannelErrorCode(connectionId: Int, promise: Promise) {
+    val conn = mConnections[connectionId]   
+    promise.resolve(conn.localChannelErrorCode.errorCode)   
+  }
+
+  @ReactMethod
+  fun connectionGetRemoteChannelErrorCode(connectionId: Int, promise: Promise) {
+    val conn = mConnections[connectionId]
+    promise.resolve(conn.remoteChannelErrorCode.errorCode)
+  }
+
+  @ReactMethod
+  fun connectionGetDirectCandidatesChannelErrorCode(connectionId: Int, promise: Promise) {
+    val conn = mConnections[connectionId]
+    promise.resolve(conn.directCandidatesChannelErrorCode.errorCode)
+  }
+
+  @ReactMethod
+  fun connectionPasswordAuthenticate(connectionId: Int, username: String, password: String, promise: Promise) {
+    val conn = mConnections[connectionId]
+    conn.passwordAuthenticateCallback(username, password) { error, _ ->
+      if (error == ErrorCodes.OK) {
+        promise.resolve(null)
+      } else {
+        promise.reject(exceptionFromStatus(conn, error))
+      }
+    }  
+  }
+
+  @ReactMethod
+  fun connectionClose(connectionId: Int, promise: Promise) {
+    val conn = mConnections.get(connectionId)
+    conn.connectionClose()
+    promise.resolve(null)
+  }
+
+  // ----------------------------------------------------------
+  // Stream methods
+  // ----------------------------------------------------------
+  @ReactMethod
+  fun streamOpen(streamId: Int, streamPort: Int, promise: Promise) {
+    val stream = mStreams[streamId]
+    stream.openCallback(streamPort) { error, _ ->
+      if (error == ErrorCodes.OK) {
+        promise.resolve(null)
+      } else {
+        promise.reject(IllegalStateException(ErrorCode(error).description))
+      }
+    }
+  }
+
+  @ReactMethod
+  fun streamReadSome(streamId: Int, promise: Promise) {
+    val stream = mStreams[streamId]
+    stream.readSomeCallback { error, maybeBytes ->
+      if (error == ErrorCodes.OK && maybeBytes.isPresent()) {
+        val bytes = maybeBytes.get()
+        val result = WritableNativeArray()
+        bytes.forEach { result.pushInt(it.toInt()) }
+        promise.resolve(result)
+      } else {
+        promise.reject(IllegalStateException(ErrorCode(error).description))
+      }
+    }
+  }
+
+  @ReactMethod
+  fun streamReadAll(streamId: Int, length: Int, promise: Promise) {
+    val stream = mStreams[streamId]
+    stream.readAllCallback(length) { error, maybeBytes ->
+      if (error == ErrorCodes.OK && maybeBytes.isPresent()) {
+        val bytes = maybeBytes.get()
+        val result = WritableNativeArray()
+        bytes.forEach { result.pushInt(it.toInt()) }
+        promise.resolve(result)
+      } else {
+        promise.reject(IllegalStateException(ErrorCode(error).description))
+      }
+    }
+  }
+
+  @ReactMethod
+  fun streamWrite(streamId: Int, bytesBase64: String, promise: Promise) {
+    val stream = mStreams[streamId]
+    val bytes = Base64.getDecoder().decode(bytesBase64)
+    stream.writeCallback(bytes) { error, _ ->
+      if (error == ErrorCodes.OK) {
+        promise.resolve(null)
+      } else {
+        promise.reject(IllegalStateException(ErrorCode(error).description))
+      }
+    }
+  }
+
+  @ReactMethod
+  fun streamClose(streamId: Int, promise: Promise) {
+    val stream = mStreams[streamId]
+    stream.streamClose()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun streamDispose(streamId: Int, promise: Promise) {
+    val stream = mStreams[streamId]
+    stream.close()
+    mStreams.remove(streamId)
     promise.resolve(null)
   }
 
@@ -173,5 +360,36 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
         promise.reject(IllegalStateException(ErrorCode(error).description))
       }
     }
+  }
+
+  // ----------------------------------------------------------
+  // Tcp Tunnel methods
+  // ----------------------------------------------------------
+  @ReactMethod
+  fun tcpTunnelOpen(tcpTunnelId: Int, service: String, localPort: Int, promise: Promise) {
+    val tunnel = mTcpTunnels[tcpTunnelId]
+    tunnel.open(service, localPort)
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun tcpTunnelGetLocalPort(tcpTunnelId: Int, promise: Promise) {
+    val tunnel = mTcpTunnels[tcpTunnelId]
+    promise.resolve(tunnel.localPort)
+  }
+
+  @ReactMethod
+  fun tcpTunnelClose(tcpTunnelId: Int, promise: Promise) {
+    val tunnel = mTcpTunnels[tcpTunnelId]
+    tunnel.tunnelClose()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun tcpTunnelDispose(tcpTunnelId: Int, promise: Promise) {
+    val tunnel = mTcpTunnels[tcpTunnelId]
+    tunnel.close()
+    mTcpTunnels.remove(tcpTunnelId)
+    promise.resolve(null)
   }
 }

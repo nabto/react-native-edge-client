@@ -83,7 +83,7 @@ repositories {
 }
 
 def kotlin_version = getExtOrDefault("kotlinVersion")
-def nabtoWrapperVersion = "2.4.0"
+def nabtoWrapperVersion = "3.0.0"
 
 dependencies {
   // For < 0.71, this will be from the local maven repo

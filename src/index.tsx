@@ -1,2 +1,2 @@
 export * from "./interface"
-export { createNabtoClient } from "./NabtoClientImpl"
+export { createNabtoClient } from "./impl/NabtoClientImpl"

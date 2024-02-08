@@ -1,6 +1,6 @@
-import { toBase64 } from "./Util";
-import type { Coap, CoapContentFormat, CoapResult } from "./interface"
-import EdgeClient from "./module"
+import { toBase64 } from "./util";
+import type { Coap, CoapContentFormat, CoapResult } from "../interface"
+import EdgeClient from "../module"
 
 export class CoapImpl implements Coap {
     private static nextId = 0

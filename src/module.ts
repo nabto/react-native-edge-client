@@ -9,17 +9,45 @@ interface NativeCoapResult {
 interface EdgeClientNativeModule {
     createNabtoClient(id: number): Promise<void>
     clientGetVersion(clientId: number): string
+    clientSetLogLevel(clientId: number, level: string): Promise<void>
     clientCreatePrivateKey(clientId: number): string
+    createMdnsScanner(clientId: number, scannerId: number, subtype: string): Promise<void>
     clientCreateConnection(clientId: number, connectionId: number): Promise<void>
-    clientClose(clientId: number): Promise<void>
+    clientDispose(clientId: number): Promise<void>
   
     connectionUpdateOptions(connectionId: number, options: string): void
     connectionGetOptions(connectionId: number): string
     connectionConnect(connectionId: number): Promise<void>
+    connectionCreateStream(connectionId: number, streamId: number): Promise<void>
     connectionCreateCoap(connectionId: number, coapId: number, method: string, path: string): Promise<void>
+    connectionGetDeviceFingerprint(connectionId: number): Promise<string>
+    connectionGetClientFingerprint(connectionId: number): Promise<string>
+    connectionGetType(connectionId: number): Promise<number>
+    connectionEnableDirectCandidates(connectionId: number): Promise<void>
+    connectionAddDirectCandidate(connectionId: number, host: string, port: number): Promise<void>
+    connectionEndOfDirectCandidates(connectionId: number): Promise<void>
+    connectionCreateTcpTunnel(connectionId: number, tcpTunnelId: number): Promise<void>
+    connectionDispose(connectionId: number): Promise<void>
+    connectionClose(connectionId: number): Promise<void>
+    connectionGetLocalChannelErrorCode(connectionId: number): Promise<number>
+    connectionGetRemoteChannelErrorCode(connectionId: number): Promise<number>
+    connectionGetDirectCandidatesChannelErrorCode(connectionId: number): Promise<number>
+    connectionPasswordAuthenticate(connectionId: number, username: string, password: string): Promise<void>
+
+    streamOpen(streamId: number, streamPort: number): Promise<void>
+    streamReadSome(streamId: number): Promise<number[]>
+    streamReadAll(streamId: number, length: number): Promise<number[]>
+    streamWrite(streamId: number, bytesBase64: string): Promise<void>
+    streamClose(streamId: number): Promise<void>
+    streamDispose(streamId: number): Promise<void>
 
     coapSetRequestPayload(coapId: number, contentFormat: number, payloadBase64: string): void
     coapExecute(coapId: number): Promise<NativeCoapResult>
+
+    tcpTunnelOpen(tcpTunnelId: number, service: string, localPort: number): Promise<void>
+    tcpTunnelGetLocalPort(tcpTunnelId: number): Promise<number>
+    tcpTunnelClose(tcpTunnelId: number): Promise<void>
+    tcpTunnelDispose(tcpTunnelId: number): Promise<void>
 }
 
 const LINKING_ERROR =
