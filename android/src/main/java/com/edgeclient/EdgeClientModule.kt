@@ -1,15 +1,20 @@
 package com.edgeclient
 
 import android.util.SparseArray
+import android.util.Log
 import java.util.Base64
 
 import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.Callback
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableNativeArray
 import com.facebook.react.bridge.WritableNativeMap
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.modules.core.DeviceEventManagerModule
 
 import com.nabto.edge.client.Connection
 import com.nabto.edge.client.Coap
@@ -17,17 +22,24 @@ import com.nabto.edge.client.NabtoClient
 import com.nabto.edge.client.Stream
 import com.nabto.edge.client.TcpTunnel
 import com.nabto.edge.client.MdnsScanner
+import com.nabto.edge.client.ConnectionEventsCallback
 import com.nabto.edge.client.ErrorCodes
 import com.nabto.edge.client.ErrorCode
 import com.nabto.edge.client.NabtoEOFException
 import com.nabto.edge.client.NabtoNoChannelsException
 import com.nabto.edge.client.NabtoRuntimeException
 
+data class ConnectionContext(
+  val conn: Connection,
+  val listener: ConnectionEventsCallback
+)
+
 class EdgeClientModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
   private val mNabtoClients = SparseArray<NabtoClient>()
-  private val mConnections = SparseArray<Connection>()
+  private val mConnections = SparseArray<ConnectionContext>()
+  private val mConnectionEventListeners = SparseArray<ConnectionEventsCallback>()
   private val mStreams = SparseArray<Stream>()
   private val mCoapObjects = SparseArray<Coap>()
   private val mTcpTunnels = SparseArray<TcpTunnel>()
@@ -62,73 +74,151 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
     return result
   }
 
+  private fun getConnection(connectionId: Int): Connection {
+    return mConnections[connectionId]?.conn ?: throw IllegalArgumentException("Invalid connection!")
+  }
+
+  private fun sendEvent(eventName: String, eventParams: WritableMap?) {
+    reactContext
+      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+      .emit(eventName, eventParams)
+  }
+
+  // NOTE: addListener and removeListener are here because react-native will log the following warning without (but still works regardless)
+  // `new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method. 
+
+  @ReactMethod
+  fun addListener(@Suppress("UNUSED_PARAMETER") eventName: String) {
+    // Empty on purpose
+  }
+
+  @ReactMethod
+  fun removeListeners(@Suppress("UNUSED_PARAMETER") count: Int) {
+    // Empty on purpose
+  }
+
   // ----------------------------------------------------------
   // Nabto Client methods
   // ----------------------------------------------------------
   @ReactMethod
-  fun createNabtoClient(id: Int, promise: Promise) {
+  fun createNabtoClient(id: Double, promise: Promise) {
     val client = NabtoClient.create(reactContext)
-    mNabtoClients.put(id, client)
+    mNabtoClients.put(id.toInt(), client)
     promise.resolve(null)
   }
 
-  @ReactMethod(isBlockingSynchronousMethod = true)
-  fun clientGetVersion(clientId: Int): String {
-    return mNabtoClients.get(clientId).version()
+  @ReactMethod
+  fun clientGetVersion(clientId: Double, promise: Promise) {
+    promise.resolve(mNabtoClients[clientId.toInt()].version())
   }
 
   @ReactMethod
-  fun clientSetLogLevel(clientId: Int, level: String, promise: Promise) {
-    mNabtoClients[clientId].setLogLevel(level)
+  fun clientSetLogLevel(clientId: Double, level: String, promise: Promise) {
+    mNabtoClients[clientId.toInt()].setLogLevel(level)
     promise.resolve(null)
   }
 
-  @ReactMethod(isBlockingSynchronousMethod = true)
-  fun clientCreatePrivateKey(clientId: Int): String {
-    return mNabtoClients.get(clientId).createPrivateKey()
+  @ReactMethod
+  fun clientCreatePrivateKey(clientId: Double, promise: Promise) {
+    promise.resolve(mNabtoClients[clientId.toInt()].createPrivateKey())
   }
 
   @ReactMethod
-  fun clientCreateConnection(clientId: Int, connectionId: Int, promise: Promise) {
-    val client = mNabtoClients.get(clientId)
+  fun clientCreateConnection(clientId: Double, connectionId: Double, promise: Promise) {
+    val client = mNabtoClients.get(clientId.toInt())
+
+    val listener = object : ConnectionEventsCallback() {
+      override fun onEvent(event: Int) {
+        val params = Arguments.createMap().apply {
+          putDouble("event", event.toDouble())
+        }
+        sendEvent("ConnectionOnEvent#${connectionId}", params)
+      }
+    }
+    
     val connection = client.createConnection()
-    mConnections.put(connectionId, connection)
+    connection.addConnectionEventsListener(listener)
+
+    mConnections.put(connectionId.toInt(), ConnectionContext(connection, listener))
     promise.resolve(null)
   }
 
   @ReactMethod
-  fun createMdnsScanner(clientId: Int, scannerId: Int, subtype: String, promise: Promise) {
-    val client = mNabtoClients[clientId]
+  fun createMdnsScanner(clientId: Double, scannerId: Double, subtype: String, promise: Promise) {
+    val client = mNabtoClients[clientId.toInt()]
     val scanner = client.createMdnsScanner(subtype)
-    mMdnsScanners.put(scannerId, scanner)
+
+    scanner.addMdnsResultReceiver { result ->
+      val params = Arguments.createMap().apply {
+        putDouble("action", result.action.ordinal.toDouble())
+        putString("deviceId", result.deviceId)
+        putString("productId", result.productId)
+        putString("serviceInstanceName", result.serviceInstanceName)
+        
+        val txtItems = Arguments.createMap().apply {
+          result.txtItems.forEach { putString(it.key, it.value) }
+        }
+
+        putMap("txtItems", txtItems)
+      }
+
+      sendEvent("ScannerOnResult#${scannerId}", params)
+    }
+
+    mMdnsScanners.put(scannerId.toInt(), scanner)
     promise.resolve(null)
   }
 
   @ReactMethod
-  fun clientDispose(clientId: Int, promise: Promise) {
-    mNabtoClients[clientId].close()
-    mNabtoClients.remove(clientId)
+  fun clientDispose(clientId: Double, promise: Promise) {
+    mNabtoClients[clientId.toInt()].close()
+    mNabtoClients.remove(clientId.toInt())
     promise.resolve(null)
+  }
+
+  // ----------------------------------------------------------
+  // MdnsScanner methods
+  // ----------------------------------------------------------
+
+  @ReactMethod
+  fun mdnsScannerStart(scannerId: Double, promise: Promise) {
+    val scanner = mMdnsScanners[scannerId.toInt()]
+    scanner.start()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun mdnsScannerStop(scannerId: Double, promise: Promise) {
+    val scanner = mMdnsScanners[scannerId.toInt()]
+    scanner.stop()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun mdnsScannerIsStarted(scannerId: Double, promise: Promise) {
+    val scanner = mMdnsScanners[scannerId.toInt()]
+    promise.resolve(scanner.isStarted)
   }
 
   // ----------------------------------------------------------
   // Connection methods
   // ----------------------------------------------------------
-  @ReactMethod(isBlockingSynchronousMethod = true)
-  fun connectionUpdateOptions(connectionId: Int, options: String) {
-    val conn = mConnections.get(connectionId)
+  @ReactMethod
+  fun connectionUpdateOptions(connectionId: Double, options: String, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     conn.updateOptions(options)
-  }
-
-  @ReactMethod(isBlockingSynchronousMethod = true)
-  fun connectionGetOptions(connectionId: Int): String {
-    val conn = mConnections.get(connectionId)
-    return conn.options
+    promise.resolve(null)
   }
 
   @ReactMethod
-  fun connectionConnect(connectionId: Int, promise: Promise) {
-    val conn = mConnections.get(connectionId)
+  fun connectionGetOptions(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
+    promise.resolve(conn.options)
+  }
+
+  @ReactMethod
+  fun connectionConnect(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     conn.connectCallback { error, _ ->
       if (error == ErrorCodes.OK) {
         promise.resolve(null)
@@ -139,97 +229,97 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun connectionCreateStream(connectionId: Int, streamId: Int, promise: Promise) {
-    val conn = mConnections[connectionId]
+  fun connectionCreateStream(connectionId: Double, streamId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     val stream = conn.createStream()
-    mStreams.put(streamId, stream)
+    mStreams.put(streamId.toInt(), stream)
     promise.resolve(null)
   }
 
   @ReactMethod
-  fun connectionCreateCoap(connectionId: Int, coapId: Int, method: String, path: String, promise: Promise) {
-    val conn = mConnections.get(connectionId)
+  fun connectionCreateCoap(connectionId: Double, coapId: Double, method: String, path: String, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     val coap = conn.createCoap(method, path)
-    mCoapObjects.put(coapId, coap)
+    mCoapObjects.put(coapId.toInt(), coap)
     promise.resolve(null)
   }
 
   @ReactMethod
-  fun connectionCreateTcpTunnel(connectionId: Int, tcpTunnelId: Int, promise: Promise) {
-    val conn = mConnections[connectionId]
+  fun connectionCreateTcpTunnel(connectionId: Double, tcpTunnelId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     val tunnel = conn.createTcpTunnel()
-    mTcpTunnels.put(tcpTunnelId, tunnel)
+    mTcpTunnels.put(tcpTunnelId.toInt(), tunnel)
     promise.resolve(null)
   }
   
   @ReactMethod
-  fun connectionGetDeviceFingerprint(connectionId: Int, promise: Promise) {
-    val conn = mConnections[connectionId]
+  fun connectionGetDeviceFingerprint(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     promise.resolve(conn.deviceFingerprint)
   }
 
   @ReactMethod
-  fun connectionGetClientFingerprint(connectionId: Int, promise: Promise) {
-    val conn = mConnections[connectionId]
+  fun connectionGetClientFingerprint(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     promise.resolve(conn.clientFingerprint)
   }
 
   @ReactMethod
-  fun connectionGetType(connectionId: Int, promise: Promise) {
-    val conn = mConnections[connectionId]
+  fun connectionGetType(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     promise.resolve(conn.type.ordinal)
   }
 
   @ReactMethod
-  fun connectionEnableDirectCandidates(connectionId: Int, promise: Promise) {
-    val conn = mConnections[connectionId]
+  fun connectionEnableDirectCandidates(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     conn.enableDirectCandidates()
     promise.resolve(null)
   }
 
   @ReactMethod
-  fun connectionAddDirectCandidate(connectionId: Int, host: String, port: Int, promise: Promise) {
-    val conn = mConnections[connectionId]     
-    conn.addDirectCandidate(host, port)
+  fun connectionAddDirectCandidate(connectionId: Double, host: String, port: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
+    conn.addDirectCandidate(host, port.toUInt().toInt())
     promise.resolve(null) 
   }
 
   @ReactMethod
-  fun connectionEndOfDirectCandidates(connectionId: Int, promise: Promise) {
-    val conn = mConnections[connectionId]
+  fun connectionEndOfDirectCandidates(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     conn.endOfDirectCandidates()
     promise.resolve(null)
   }
 
   @ReactMethod
-  fun connectionDispose(connectionId: Int, promise: Promise) {
-    val conn = mConnections[connectionId]
-    mConnections.remove(connectionId)
+  fun connectionDispose(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
+    mConnections.remove(connectionId.toInt())
     conn.close()
     promise.resolve(null)
   }
 
   @ReactMethod
-  fun connectionGetLocalChannelErrorCode(connectionId: Int, promise: Promise) {
-    val conn = mConnections[connectionId]   
+  fun connectionGetLocalChannelErrorCode(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     promise.resolve(conn.localChannelErrorCode.errorCode)   
   }
 
   @ReactMethod
-  fun connectionGetRemoteChannelErrorCode(connectionId: Int, promise: Promise) {
-    val conn = mConnections[connectionId]
+  fun connectionGetRemoteChannelErrorCode(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     promise.resolve(conn.remoteChannelErrorCode.errorCode)
   }
 
   @ReactMethod
-  fun connectionGetDirectCandidatesChannelErrorCode(connectionId: Int, promise: Promise) {
-    val conn = mConnections[connectionId]
+  fun connectionGetDirectCandidatesChannelErrorCode(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     promise.resolve(conn.directCandidatesChannelErrorCode.errorCode)
   }
 
   @ReactMethod
-  fun connectionPasswordAuthenticate(connectionId: Int, username: String, password: String, promise: Promise) {
-    val conn = mConnections[connectionId]
+  fun connectionPasswordAuthenticate(connectionId: Double, username: String, password: String, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     conn.passwordAuthenticateCallback(username, password) { error, _ ->
       if (error == ErrorCodes.OK) {
         promise.resolve(null)
@@ -240,8 +330,8 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun connectionClose(connectionId: Int, promise: Promise) {
-    val conn = mConnections.get(connectionId)
+  fun connectionClose(connectionId: Double, promise: Promise) {
+    val conn = getConnection(connectionId.toInt())
     conn.connectionClose()
     promise.resolve(null)
   }
@@ -250,9 +340,9 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
   // Stream methods
   // ----------------------------------------------------------
   @ReactMethod
-  fun streamOpen(streamId: Int, streamPort: Int, promise: Promise) {
-    val stream = mStreams[streamId]
-    stream.openCallback(streamPort) { error, _ ->
+  fun streamOpen(streamId: Double, streamPort: Double, promise: Promise) {
+    val stream = mStreams[streamId.toInt()]
+    stream.openCallback(streamPort.toUInt().toInt()) { error, _ ->
       if (error == ErrorCodes.OK) {
         promise.resolve(null)
       } else {
@@ -262,8 +352,8 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun streamReadSome(streamId: Int, promise: Promise) {
-    val stream = mStreams[streamId]
+  fun streamReadSome(streamId: Double, promise: Promise) {
+    val stream = mStreams[streamId.toInt()]
     stream.readSomeCallback { error, maybeBytes ->
       if (error == ErrorCodes.OK && maybeBytes.isPresent()) {
         val bytes = maybeBytes.get()
@@ -277,9 +367,9 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun streamReadAll(streamId: Int, length: Int, promise: Promise) {
-    val stream = mStreams[streamId]
-    stream.readAllCallback(length) { error, maybeBytes ->
+  fun streamReadAll(streamId: Double, length: Double, promise: Promise) {
+    val stream = mStreams[streamId.toInt()]
+    stream.readAllCallback(length.toInt()) { error, maybeBytes ->
       if (error == ErrorCodes.OK && maybeBytes.isPresent()) {
         val bytes = maybeBytes.get()
         val result = WritableNativeArray()
@@ -292,8 +382,8 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun streamWrite(streamId: Int, bytesBase64: String, promise: Promise) {
-    val stream = mStreams[streamId]
+  fun streamWrite(streamId: Double, bytesBase64: String, promise: Promise) {
+    val stream = mStreams[streamId.toInt()]
     val bytes = Base64.getDecoder().decode(bytesBase64)
     stream.writeCallback(bytes) { error, _ ->
       if (error == ErrorCodes.OK) {
@@ -305,17 +395,17 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun streamClose(streamId: Int, promise: Promise) {
-    val stream = mStreams[streamId]
+  fun streamClose(streamId: Double, promise: Promise) {
+    val stream = mStreams[streamId.toInt()]
     stream.streamClose()
     promise.resolve(null)
   }
 
   @ReactMethod
-  fun streamDispose(streamId: Int, promise: Promise) {
-    val stream = mStreams[streamId]
+  fun streamDispose(streamId: Double, promise: Promise) {
+    val stream = mStreams[streamId.toInt()]
     stream.close()
-    mStreams.remove(streamId)
+    mStreams.remove(streamId.toInt())
     promise.resolve(null)
   }
 
@@ -323,26 +413,26 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
   // Coap methods
   // ----------------------------------------------------------
   @ReactMethod
-  fun coapSetRequestPayload(coapId: Int, contentFormat: Int, payloadBase64: String) {
-    mCoapObjects[coapId]?.let {
+  fun coapSetRequestPayload(coapId: Double, contentFormat: Double, payloadBase64: String) {
+    mCoapObjects[coapId.toInt()]?.let {
       val payload = Base64.getDecoder().decode(payloadBase64)
-      it.setRequestPayload(contentFormat, payload)
+      it.setRequestPayload(contentFormat.toInt(), payload)
     }
   }
 
-  private fun getCoapObjectOrThrow(coapId: Int): Coap {
-    if (mCoapObjects.contains(coapId)) {
-      return mCoapObjects[coapId]
+  private fun getCoapObjectOrThrow(coapId: Double): Coap {
+    if (mCoapObjects.contains(coapId.toInt())) {
+      return mCoapObjects[coapId.toInt()]
     } else {
       throw IllegalArgumentException("Coap object is invalid.")
     }
   }
 
   @ReactMethod
-  fun coapExecute(coapId: Int, promise: Promise) {
+  fun coapExecute(coapId: Double, promise: Promise) {
     val coap = getCoapObjectOrThrow(coapId)
     coap.executeCallback { error, _ ->
-      mCoapObjects.remove(coapId)
+      mCoapObjects.remove(coapId.toInt())
 
       if (error == ErrorCodes.OK) {
         val result = WritableNativeMap()
@@ -366,30 +456,30 @@ class EdgeClientModule(private val reactContext: ReactApplicationContext) :
   // Tcp Tunnel methods
   // ----------------------------------------------------------
   @ReactMethod
-  fun tcpTunnelOpen(tcpTunnelId: Int, service: String, localPort: Int, promise: Promise) {
-    val tunnel = mTcpTunnels[tcpTunnelId]
-    tunnel.open(service, localPort)
+  fun tcpTunnelOpen(tcpTunnelId: Double, service: String, localPort: Double, promise: Promise) {
+    val tunnel = mTcpTunnels[tcpTunnelId.toInt()]
+    tunnel.open(service, localPort.toUInt().toInt())
     promise.resolve(null)
   }
 
   @ReactMethod
-  fun tcpTunnelGetLocalPort(tcpTunnelId: Int, promise: Promise) {
-    val tunnel = mTcpTunnels[tcpTunnelId]
+  fun tcpTunnelGetLocalPort(tcpTunnelId: Double, promise: Promise) {
+    val tunnel = mTcpTunnels[tcpTunnelId.toInt()]
     promise.resolve(tunnel.localPort)
   }
 
   @ReactMethod
-  fun tcpTunnelClose(tcpTunnelId: Int, promise: Promise) {
-    val tunnel = mTcpTunnels[tcpTunnelId]
+  fun tcpTunnelClose(tcpTunnelId: Double, promise: Promise) {
+    val tunnel = mTcpTunnels[tcpTunnelId.toInt()]
     tunnel.tunnelClose()
     promise.resolve(null)
   }
 
   @ReactMethod
-  fun tcpTunnelDispose(tcpTunnelId: Int, promise: Promise) {
-    val tunnel = mTcpTunnels[tcpTunnelId]
+  fun tcpTunnelDispose(tcpTunnelId: Double, promise: Promise) {
+    val tunnel = mTcpTunnels[tcpTunnelId.toInt()]
     tunnel.close()
-    mTcpTunnels.remove(tcpTunnelId)
+    mTcpTunnels.remove(tcpTunnelId.toInt())
     promise.resolve(null)
   }
 }

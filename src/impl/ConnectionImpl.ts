@@ -1,24 +1,53 @@
 import EdgeClient from "../module";
-import type { Coap, Connection, ConnectionOptions, ConnectionType, ErrorCode, Stream, TcpTunnel } from "../interface";
+import type { Coap, Connection, ConnectionOptions, ConnectionType, ErrorCode, OnEventCallback, Stream, TcpTunnel } from "../interface";
 import { CoapImpl } from "./CoapImpl";
 import { TcpTunnelImpl } from "./TcpTunnelImpl";
 import { StreamImpl } from "./StreamImpl";
+import { NativeEventEmitter } from "react-native";
+import type { EmitterSubscription } from "react-native";
 
 export class ConnectionImpl implements Connection {
     private static nextId = 0
     id = ConnectionImpl.nextId++
+    listeners: OnEventCallback[] = []
+    nativeEventListener?: EmitterSubscription
 
-    updateOptions(options: ConnectionOptions): void {
-        EdgeClient.connectionUpdateOptions(this.id, JSON.stringify(options));
+    constructor() {
+        const emitter = new NativeEventEmitter(EdgeClient);
+        this.nativeEventListener = emitter.addListener(`ConnectionOnEvent#${this.id}`, (event: {event: number}) => {
+            this.listeners.forEach(func => func(event.event));
+        })
     }
 
-    getOptions(): ConnectionOptions {
-        // @TODO: Validation?
-        return JSON.parse(EdgeClient.connectionGetOptions(this.id));
+    private cleanup() {
+        this.listeners = [];
+        this.nativeEventListener?.remove();
+        this.nativeEventListener = undefined;
     }
 
     connect(): Promise<void> {
         return EdgeClient.connectionConnect(this.id);
+    }
+
+    addConnectionEventsListener(listener: OnEventCallback): void {
+        this.listeners.push(listener);
+    }
+
+    removeConnectionEventsListener(listener: OnEventCallback): boolean {
+        const index = this.listeners.indexOf(listener);
+        if (index >= 0) {
+            this.listeners.splice(index, 1);
+            return true;
+        }
+        return false;
+    }
+
+    async updateOptions(options: ConnectionOptions) {
+        return EdgeClient.connectionUpdateOptions(this.id, JSON.stringify(options));
+    }
+
+    async getOptions() {
+        return JSON.parse(await EdgeClient.connectionGetOptions(this.id));
     }
 
     async createStream(): Promise<Stream> {
@@ -34,56 +63,58 @@ export class ConnectionImpl implements Connection {
     }
 
     async createTcpTunnel(): Promise<TcpTunnel> {
-        const tunnel = new TcpTunnelImpl()
-        EdgeClient.connectionCreateTcpTunnel(this.id, tunnel.id);
+        const tunnel = new TcpTunnelImpl();
+        await EdgeClient.connectionCreateTcpTunnel(this.id, tunnel.id);
         return tunnel;
     }
 
-    async getDeviceFingerprint(): Promise<string> {
+    getDeviceFingerprint(): Promise<string> {
         return EdgeClient.connectionGetDeviceFingerprint(this.id);
     }
 
-    async getClientFingerprint(): Promise<string> {
+    getClientFingerprint(): Promise<string> {
         return EdgeClient.connectionGetClientFingerprint(this.id);
     }
 
-    async getType(): Promise<ConnectionType> {
+    getType(): Promise<ConnectionType> {
         return EdgeClient.connectionGetType(this.id);
     }
 
-    async enableDirectCandidates(): Promise<void> {
+    enableDirectCandidates(): Promise<void> {
         return EdgeClient.connectionEnableDirectCandidates(this.id);
     }
 
-    async addDirectCandidate(host: string, port: number): Promise<void> {
+    addDirectCandidate(host: string, port: number): Promise<void> {
         return EdgeClient.connectionAddDirectCandidate(this.id, host, port);
     }
 
-    async endOfDirectCandidates(): Promise<void> {
+    endOfDirectCandidates(): Promise<void> {
         return EdgeClient.connectionEndOfDirectCandidates(this.id);
     }
 
-    async close(): Promise<void> {
+    close(): Promise<void> {
+        this.cleanup();
         return EdgeClient.connectionClose(this.id);
     }
 
-    async dispose(): Promise<void> {
+    dispose(): Promise<void> {
+        this.cleanup();
         return EdgeClient.connectionDispose(this.id);
     }
 
-    async getLocalChannelErrorCode(): Promise<ErrorCode> {
+    getLocalChannelErrorCode(): Promise<ErrorCode> {
         return EdgeClient.connectionGetLocalChannelErrorCode(this.id);
     }
 
-    async getRemoteChannelErrorCode(): Promise<ErrorCode> {
+    getRemoteChannelErrorCode(): Promise<ErrorCode> {
         return EdgeClient.connectionGetRemoteChannelErrorCode(this.id);
     }
 
-    async getDirectCandidatesChannelErrorCode(): Promise<ErrorCode> {
+    getDirectCandidatesChannelErrorCode(): Promise<ErrorCode> {
         return EdgeClient.connectionGetDirectCandidatesChannelErrorCode(this.id);
     }
 
-    async passwordAuthenticate(username: string, password: string): Promise<void> {
+    passwordAuthenticate(username: string, password: string): Promise<void> {
         return EdgeClient.connectionPasswordAuthenticate(this.id, username, password);
     }
 

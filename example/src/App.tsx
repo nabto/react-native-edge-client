@@ -17,10 +17,11 @@ export default function App() {
   React.useEffect(() => {
     const func = async () => {
       if (!client) return;
+      await client.setLogLevel("trace");
 
-      setVersion(client.version());
+      setVersion(await client.version());
 
-      const pk = client.createPrivateKey();
+      const pk = await client.createPrivateKey();
       setPrivateKey(pk);
       setConn(await client.createConnection());
     }
@@ -32,13 +33,18 @@ export default function App() {
     const func = async () => {
       if (conn) {
         conn.updateOptions({
-          DeviceId: "de-9jiqspvw",
-          ProductId: "pr-gocdozxt",
+          DeviceId: "de-bgdqxtqs",
+          ProductId: "pr-4fiowoh4",
           PrivateKey: privateKey,
           ServerConnectToken: "MW6oipDcshn7"
         });
 
+        conn.addConnectionEventsListener(event => {
+          console.log(`Connection event: ${event}`);
+        });
+
         await conn.connect();
+        await conn.passwordAuthenticate("reactnative", "6f617198-b161-42");
         
         console.log(`Device Fingerprint: ${await conn.getDeviceFingerprint()}`);
         console.log(`Client Fingerprint: ${await conn.getClientFingerprint()}`);
@@ -55,7 +61,16 @@ export default function App() {
         console.log(SignalingStreamPort)
         const stream = await conn.createStream();
         setStream(stream);
-        await stream.open(SignalingStreamPort);
+        try {
+          await stream.open(SignalingStreamPort);
+        } catch(err) {
+          console.log(`Stream exception: ${err}`);
+        }
+        console.log(`Stream open?`);
+        
+        const msg = JSON.stringify({});
+        const encodedMsg = Array.from(msg, v => v.charCodeAt(0));
+        await stream.write(new Uint8Array([msg.length, ...encodedMsg]))
       }
     }
 

@@ -1,15 +1,33 @@
-export interface NabtoClient {
-  version(): string
-  setLogLevel(level: string): Promise<void>
-  createPrivateKey(): string
-  createConnection(): Promise<Connection>
-  createMdnsScanner(): Promise<MdnsScanner>
-  createMdnsScanner(subtype: string): Promise<MdnsScanner>
-  dispose(): Promise<void>
+// ----------------------------------------------------------
+// Enums and struct types
+// ----------------------------------------------------------
+
+// @TODO
+export enum ErrorCode {
+  OK
 }
 
-export interface MdnsScanner {
-  // @TODO
+export enum ConnectionType {
+  RELAY, DIRECT
+}
+
+export const enum ConnectionEvent {
+  CONNECTED,
+  CLOSED,
+  CHANNEL_CHANGED
+}
+
+export const enum MdnsResultAction {
+  ADD, UPDATE, REMOVE
+}
+
+export enum CoapContentFormat {
+  TEXT_PLAIN_UTF8 = 0,
+  APPLICATION_LINK_FORMAT = 40,
+  XML = 41,
+  APPLICATION_OCTET_STREAM = 42,
+  APPLICATION_JSON = 50,
+  APPLICATION_CBOR = 60
 }
 
 export interface ConnectionOptions {
@@ -22,22 +40,12 @@ export interface ConnectionOptions {
   KeepAliveMaxRetries?: number
 }
 
-export enum ConnectionType {
-  RELAY, DIRECT
-}
-
-// @TODO
-export enum ErrorCode {
-  OK
-}
-
-export enum CoapContentFormat {
-  TEXT_PLAIN_UTF8 = 0,
-  APPLICATION_LINK_FORMAT = 40,
-  XML = 41,
-  APPLICATION_OCTET_STREAM = 42,
-  APPLICATION_JSON = 50,
-  APPLICATION_CBOR = 60
+export interface MdnsResult {
+  action: MdnsResultAction,
+  productId: string,
+  deviceId: string,
+  serviceInstanceName: string,
+  txtItems: Record<string, string>,
 }
 
 export interface CoapResult {
@@ -46,9 +54,40 @@ export interface CoapResult {
   responsePayload: Uint8Array
 }
 
+// ----------------------------------------------------------
+// Callback types
+// ----------------------------------------------------------
+export type OnEventCallback = (event: ConnectionEvent) => void
+export type OnMdnsResultCallback = (result: MdnsResult) => void
+
+// ----------------------------------------------------------
+// Nabto interface
+// ----------------------------------------------------------
+export interface NabtoClient {
+  version(): Promise<string>
+  setLogLevel(level: string): Promise<void>
+  createPrivateKey(): Promise<string>
+  createConnection(): Promise<Connection>
+  createMdnsScanner(): Promise<MdnsScanner>
+  createMdnsScanner(subtype: string): Promise<MdnsScanner>
+  dispose(): Promise<void>
+}
+
+export interface MdnsScanner {
+  start(): Promise<void>
+  stop(): Promise<void>
+  isStarted(): Promise<void>
+
+  addMdnsResultReceiver(listener: OnMdnsResultCallback): void
+  removeMdnsResultReceiver(listener: OnMdnsResultCallback): boolean
+}
+
 export interface Connection {
-  updateOptions(options: ConnectionOptions): void
-  getOptions(): ConnectionOptions
+  updateOptions(options: ConnectionOptions): Promise<void>
+  getOptions(): Promise<ConnectionOptions>
+
+  addConnectionEventsListener(listener: OnEventCallback): void
+  removeConnectionEventsListener(listener: OnEventCallback): boolean
 
   getDeviceFingerprint(): Promise<string>
   getClientFingerprint(): Promise<string>
@@ -70,8 +109,6 @@ export interface Connection {
   getDirectCandidatesChannelErrorCode(): Promise<ErrorCode>
 
   passwordAuthenticate(username: string, password: string): Promise<void>
-
-  // @TODO: ConnectionEventsListener
 }
 
 export interface Coap {

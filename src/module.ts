@@ -1,3 +1,4 @@
+import type { NativeModule } from 'react-native';
 import { NativeModules, Platform } from 'react-native';
 
 interface NativeCoapResult {
@@ -8,15 +9,19 @@ interface NativeCoapResult {
 
 interface EdgeClientNativeModule {
     createNabtoClient(id: number): Promise<void>
-    clientGetVersion(clientId: number): string
+    clientGetVersion(clientId: number): Promise<string>
     clientSetLogLevel(clientId: number, level: string): Promise<void>
-    clientCreatePrivateKey(clientId: number): string
+    clientCreatePrivateKey(clientId: number): Promise<string>
     createMdnsScanner(clientId: number, scannerId: number, subtype: string): Promise<void>
     clientCreateConnection(clientId: number, connectionId: number): Promise<void>
     clientDispose(clientId: number): Promise<void>
+
+    mdnsScannerStart(scannerId: number): Promise<void>
+    mdnsScannerStop(scannerId: number): Promise<void>
+    mdnsScannerIsStarted(scannerId: number): Promise<boolean>
   
-    connectionUpdateOptions(connectionId: number, options: string): void
-    connectionGetOptions(connectionId: number): string
+    connectionUpdateOptions(connectionId: number, options: string): Promise<void>
+    connectionGetOptions(connectionId: number): Promise<string>
     connectionConnect(connectionId: number): Promise<void>
     connectionCreateStream(connectionId: number, streamId: number): Promise<void>
     connectionCreateCoap(connectionId: number, coapId: number, method: string, path: string): Promise<void>
@@ -33,7 +38,7 @@ interface EdgeClientNativeModule {
     connectionGetRemoteChannelErrorCode(connectionId: number): Promise<number>
     connectionGetDirectCandidatesChannelErrorCode(connectionId: number): Promise<number>
     connectionPasswordAuthenticate(connectionId: number, username: string, password: string): Promise<void>
-
+    
     streamOpen(streamId: number, streamPort: number): Promise<void>
     streamReadSome(streamId: number): Promise<number[]>
     streamReadAll(streamId: number, length: number): Promise<number[]>
@@ -60,5 +65,5 @@ if (NativeModules.EdgeClient === null) {
     throw new Error(LINKING_ERROR);
 }
 
-const EdgeClient = NativeModules.EdgeClient as EdgeClientNativeModule;
+const EdgeClient = NativeModules.EdgeClient as (EdgeClientNativeModule & NativeModule);
 export default EdgeClient;
