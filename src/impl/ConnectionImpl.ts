@@ -1,5 +1,5 @@
 import EdgeClient from "../module";
-import type { Coap, Connection, ConnectionOptions, ConnectionType, ErrorCode, OnEventCallback, Stream, TcpTunnel } from "../interface";
+import type { Coap, Connection, ConnectionOptions, ConnectionType, OnEventCallback, Stream, TcpTunnel } from "../interface";
 import { CoapImpl } from "./CoapImpl";
 import { TcpTunnelImpl } from "./TcpTunnelImpl";
 import { StreamImpl } from "./StreamImpl";
@@ -100,18 +100,6 @@ export class ConnectionImpl implements Connection {
     dispose(): Promise<void> {
         this.cleanup();
         return EdgeClient.connectionDispose(this.id);
-    }
-
-    getLocalChannelErrorCode(): Promise<ErrorCode> {
-        return EdgeClient.connectionGetLocalChannelErrorCode(this.id);
-    }
-
-    getRemoteChannelErrorCode(): Promise<ErrorCode> {
-        return EdgeClient.connectionGetRemoteChannelErrorCode(this.id);
-    }
-
-    getDirectCandidatesChannelErrorCode(): Promise<ErrorCode> {
-        return EdgeClient.connectionGetDirectCandidatesChannelErrorCode(this.id);
     }
 
     passwordAuthenticate(username: string, password: string): Promise<void> {

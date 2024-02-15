@@ -28,15 +28,9 @@ interface EdgeClientNativeModule {
     connectionGetDeviceFingerprint(connectionId: number): Promise<string>
     connectionGetClientFingerprint(connectionId: number): Promise<string>
     connectionGetType(connectionId: number): Promise<number>
-    connectionEnableDirectCandidates(connectionId: number): Promise<void>
-    connectionAddDirectCandidate(connectionId: number, host: string, port: number): Promise<void>
-    connectionEndOfDirectCandidates(connectionId: number): Promise<void>
     connectionCreateTcpTunnel(connectionId: number, tcpTunnelId: number): Promise<void>
     connectionDispose(connectionId: number): Promise<void>
     connectionClose(connectionId: number): Promise<void>
-    connectionGetLocalChannelErrorCode(connectionId: number): Promise<number>
-    connectionGetRemoteChannelErrorCode(connectionId: number): Promise<number>
-    connectionGetDirectCandidatesChannelErrorCode(connectionId: number): Promise<number>
     connectionPasswordAuthenticate(connectionId: number, username: string, password: string): Promise<void>
     
     streamOpen(streamId: number, streamPort: number): Promise<void>

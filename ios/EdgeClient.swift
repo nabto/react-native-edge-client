@@ -219,55 +219,6 @@ class EdgeClient: NSObject {
     }
   }
 
-  @objc(connectionEnableDirectCandidates:withResolver:withRejecter:)
-  func connectionEnableDirectCandidates(
-    connectionId: Double, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock
-  ) {
-    // @TODO: Warning log
-    resolve(nil)
-  }
-
-  @objc(connectionAddDirectCandidate:withHost:withPort:withResolver:withRejecter:)
-  func connectionAddDirectCandidate(
-    connectionId: Double, host: NSString, port: Double, resolve: RCTPromiseResolveBlock,
-    reject: RCTPromiseRejectBlock
-  ) {
-    // @TODO: Warning log
-    resolve(nil)
-  }
-
-  @objc(connectionEndOfDirectCandidates:withResolver:withRejecter:)
-  func connectionEndOfDirectCandidates(
-    connectionId: Double, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock
-  ) {
-    // @TODO: Warning log
-    resolve(nil)
-  }
-
-  @objc(connectionGetLocalChannelErrorCode:withResolver:withRejecter:)
-  func connectionGetLocalChannelErrorCode(
-    connectionId: Double, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock
-  ) {
-    // @TODO: Deprecate on Android as well?
-    resolve(nil)
-  }
-
-  @objc(connectionGetRemoteChannelErrorCode:withResolver:withRejecter:)
-  func connectionGetRemoteChannelErrorCode(
-    connectionId: Double, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock
-  ) {
-    // @TODO: Deprecate on Android as well?
-    resolve(nil)
-  }
-
-  @objc(connectionGetDirectCandidatesChannelErrorCode:withResolver:withRejecter:)
-  func connectionGetDirectCandidatesChannelErrorCode(
-    connectionId: Double, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock
-  ) {
-    // @TODO: Deprecate on Android as well?
-    resolve(nil)
-  }
-
   @objc(connectionPasswordAuthenticate:withUsername:withPassword:withResolver:withRejecter:)
   func connectionPasswordAuthenticate(
     connectionId: Double, username: NSString, password: NSString,

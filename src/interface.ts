@@ -2,11 +2,6 @@
 // Enums and struct types
 // ----------------------------------------------------------
 
-// @TODO
-export enum ErrorCode {
-  OK
-}
-
 export enum ConnectionType {
   RELAY, DIRECT
 }
@@ -92,9 +87,6 @@ export interface Connection {
   getDeviceFingerprint(): Promise<string>
   getClientFingerprint(): Promise<string>
   getType(): Promise<ConnectionType>
-  enableDirectCandidates(): Promise<void>
-  addDirectCandidate(host: string, port: number): Promise<void>
-  endOfDirectCandidates(): Promise<void>
 
   createStream(): Promise<Stream>
   createCoap(method: string, path: string): Promise<Coap>
@@ -103,10 +95,6 @@ export interface Connection {
   close(): Promise<void>
   dispose(): Promise<void>
   connect(): Promise<void>
-
-  getLocalChannelErrorCode(): Promise<ErrorCode>
-  getRemoteChannelErrorCode(): Promise<ErrorCode>
-  getDirectCandidatesChannelErrorCode(): Promise<ErrorCode>
 
   passwordAuthenticate(username: string, password: string): Promise<void>
 }
