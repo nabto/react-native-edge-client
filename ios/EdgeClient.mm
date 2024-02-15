@@ -2,10 +2,6 @@
 
 @interface RCT_EXTERN_MODULE(EdgeClient, NSObject)
 
-RCT_EXTERN_METHOD(multiply:(float)a withB:(float)b
-                 withResolver:(RCTPromiseResolveBlock)resolve
-                 withRejecter:(RCTPromiseRejectBlock)reject)
-
 // ----------------------------------------------------------
 // Nabto Client methods
 // ----------------------------------------------------------
@@ -131,19 +127,19 @@ RCT_EXTERN_METHOD(coapExecute:(double)coapId
 RCT_EXTERN_METHOD(tcpTunnelOpen:(double)tcpTunnelId withService:(NSString)service withLocalPort:(double)localPort
                   withResolver:(RCTPromiseResolveBlock)resolve
                   withRejecter:(RCTPromiseRejectBlock)reject)
-                  
+
 RCT_EXTERN_METHOD(tcpTunnelGetLocalPort:(double)tcpTunnelId
                   withResolver:(RCTPromiseResolveBlock)resolve
                   withRejecter:(RCTPromiseRejectBlock)reject)
-                  
+
 RCT_EXTERN_METHOD(tcpTunnelClose:(double)tcpTunnelId
                   withResolver:(RCTPromiseResolveBlock)resolve
                   withRejecter:(RCTPromiseRejectBlock)reject)
-                  
+
 RCT_EXTERN_METHOD(tcpTunnelDispose:(double)tcpTunnelId
                   withResolver:(RCTPromiseResolveBlock)resolve
                   withRejecter:(RCTPromiseRejectBlock)reject)
-                  
+
 
 
 + (BOOL)requiresMainQueueSetup
