@@ -1,3 +1,5 @@
+# WIP: this is still in development. Use on own responsibility.
+
 # react-native-edge-client
 
 Nabto Edge Client for React Native
