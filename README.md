@@ -2,20 +2,25 @@
 
 Nabto Edge Client for React Native
 
-## Installation
 
-```sh
-npm install react-native-edge-client
+## Building and testing the library
+
+install yarn
+
+```
+corepack enable
 ```
 
-## Usage
+Build the code
 
-```js
-import { multiply } from 'react-native-edge-client';
+```
+yarn install
+```
 
-// ...
+Run the demo app
 
-const result = await multiply(3, 7);
+```
+yarn example start
 ```
 
 ## Contributing
